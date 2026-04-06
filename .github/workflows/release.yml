@@ -1,0 +1,15 @@
+name: Soroban Build & Validate
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    uses: stellar-expert/soroban-build-workflow/.github/workflows/build.yml@main
+    with:
+      release_name: ${{ github.ref_name }}
+      release_description: 'Engram Compliance Oracle - ${{ github.ref_name }}'
+      relative_path: 'contracts/compliance-oracle'
+      package: 'engram-compliance-oracle'
