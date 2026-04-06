@@ -36,10 +36,10 @@
                 {
                   "vec": [
                     {
-                      "string": "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                      "string": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     },
                     {
-                      "string": "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+                      "string": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     }
                   ]
                 },
@@ -69,7 +69,7 @@
                 {
                   "vec": [
                     {
-                      "string": "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                      "string": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     }
                   ]
                 },
@@ -110,7 +110,7 @@
                   "symbol": "Sanctioned"
                 },
                 {
-                  "string": "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+                  "string": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                 }
               ]
             },
@@ -130,7 +130,7 @@
                       "symbol": "Sanctioned"
                     },
                     {
-                      "string": "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+                      "string": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     }
                   ]
                 },

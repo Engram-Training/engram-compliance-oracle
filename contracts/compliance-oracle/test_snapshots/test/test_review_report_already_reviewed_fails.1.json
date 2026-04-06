@@ -37,10 +37,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "string": "0x0000000000000000000000000000000000000000"
+                  "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
                 },
                 {
-                  "string": "False positive"
+                  "string": "test"
                 }
               ]
             }
@@ -62,7 +62,7 @@
                   "u32": 0
                 },
                 {
-                  "bool": false
+                  "bool": true
                 }
               ]
             }
@@ -71,7 +71,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -126,7 +125,7 @@
                         "symbol": "reason"
                       },
                       "val": {
-                        "string": "False positive"
+                        "string": "test"
                       }
                     },
                     {
@@ -142,7 +141,7 @@
                         "symbol": "status"
                       },
                       "val": {
-                        "u32": 2
+                        "u32": 1
                       }
                     },
                     {
@@ -150,7 +149,7 @@
                         "symbol": "target"
                       },
                       "val": {
-                        "string": "0x0000000000000000000000000000000000000000"
+                        "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
                       }
                     },
                     {
@@ -168,6 +167,51 @@
             "ext": "v0"
           },
           3110400
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "key": {
+              "vec": [
+                {
+                  "symbol": "Sanctioned"
+                },
+                {
+                  "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "Sanctioned"
+                    },
+                    {
+                      "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "bool": true
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          518400
         ]
       ],
       [
@@ -214,7 +258,7 @@
                           ]
                         },
                         "val": {
-                          "u32": 0
+                          "u32": 1
                         }
                       },
                       {

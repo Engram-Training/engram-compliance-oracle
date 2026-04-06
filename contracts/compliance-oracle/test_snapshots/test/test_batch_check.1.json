@@ -36,7 +36,7 @@
                 {
                   "vec": [
                     {
-                      "string": "0xd882cFc20F52f2599D84b8e8D58C7FB62cfE344b"
+                      "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
                     }
                   ]
                 },
@@ -75,7 +75,7 @@
                   "symbol": "Sanctioned"
                 },
                 {
-                  "string": "0xd882cFc20F52f2599D84b8e8D58C7FB62cfE344b"
+                  "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
                 }
               ]
             },
@@ -95,7 +95,7 @@
                       "symbol": "Sanctioned"
                     },
                     {
-                      "string": "0xd882cFc20F52f2599D84b8e8D58C7FB62cfE344b"
+                      "string": "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
                     }
                   ]
                 },

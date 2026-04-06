@@ -11,7 +11,14 @@ pub enum DataKey {
     /// The admin address (only entity that can update sanctions data)
     Admin,
     /// Whether an address is sanctioned: DataKey::Sanctioned(addr_string) → bool
-    /// addr_string is the raw address from any chain (e.g. "0x...", "bc1...", "G...", "T...")
+    ///
+    /// addr_string is the raw address from any chain, **always lowercased**:
+    /// - ETH: "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b"
+    /// - BTC: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+    /// - Stellar: "gbjrl4c72vicl7sd7bxa4ksa5vzd5ybvwivum47px457eimdcpnqi3qj"
+    /// - Tron: "tn2yqtv5hpqenasqprfg3dqwxlkdcvk1qu"
+    ///
+    /// Callers MUST lowercase addresses before querying `is_sanctioned`.
     Sanctioned(String),
     /// Total number of sanctioned entities currently on-chain
     EntityCount,
@@ -32,7 +39,7 @@ pub enum DataKey {
 #[derive(Clone)]
 pub struct ReportEntry {
     pub reporter: Address,
-    pub target: String,   // Any chain address as a string
+    pub target: String,   // Any chain address as a string (lowercased)
     pub reason: String,
     pub timestamp: u64,
     pub status: u32, // 0=pending, 1=accepted, 2=rejected
@@ -54,15 +61,26 @@ pub enum OracleError {
     EmptyList = 4,
     /// Batch size exceeds maximum (200)
     BatchTooLarge = 5,
-    /// Invalid Merkle proof
+    /// Invalid Merkle proof provided
     InvalidProof = 6,
     /// Report not found
     ReportNotFound = 7,
+    /// Report has already been reviewed (accepted or rejected)
+    AlreadyReviewed = 8,
+    /// Maximum number of reports reached (u32::MAX)
+    ReportLimitReached = 9,
+    /// Address string is too short or too long
+    InvalidAddressLength = 10,
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const MAX_BATCH_SIZE: u32 = 200;
+
+/// Minimum address string length (e.g. shortest valid BTC addr ~26 chars)
+const MIN_ADDR_LEN: u32 = 10;
+/// Maximum address string length (prevents storage abuse)
+const MAX_ADDR_LEN: u32 = 128;
 
 // TTL: ~30 days in ledgers (1 ledger ≈ 5 seconds, 30 days ≈ 518400 ledgers)
 const TTL_THRESHOLD: u32 = 259_200;   // Extend when below ~15 days
@@ -71,6 +89,10 @@ const TTL_EXTEND_TO: u32 = 518_400;   // Extend to ~30 days
 // Instance TTL: ~90 days (contract code + instance storage)
 const INSTANCE_TTL_THRESHOLD: u32 = 518_400;   // Extend when below ~30 days
 const INSTANCE_TTL_EXTEND_TO: u32 = 1_555_200; // Extend to ~90 days
+
+// Report TTL: ~180 days (longer to give admin time to review)
+const REPORT_TTL_THRESHOLD: u32 = 518_400;     // Extend when below ~30 days
+const REPORT_TTL_EXTEND_TO: u32 = 3_110_400;   // Extend to ~180 days
 
 // ─── Contract ───────────────────────────────────────────────────────────────
 
@@ -140,8 +162,16 @@ impl ComplianceOracle {
     // ── Read (Free) ─────────────────────────────────────────────────────
 
     /// Check if an address from ANY chain is sanctioned.
-    /// Pass the raw address string: "0x1234..." (ETH), "bc1..." (BTC),
-    /// "G..." (Stellar), "T..." (Tron), etc.
+    ///
+    /// **Important**: The address string MUST be lowercased before calling.
+    /// ETH addresses are case-insensitive (EIP-55 mixed-case is a checksum).
+    /// The contract stores all addresses in lowercase.
+    ///
+    /// Examples:
+    /// - ETH: `is_sanctioned("0xd882cfc2...")` (lowercased)
+    /// - BTC: `is_sanctioned("bc1q...")`
+    /// - Stellar: `is_sanctioned("gbjrl...")`  (lowercased)
+    /// - Tron: `is_sanctioned("tn2yq...")`     (lowercased)
     pub fn is_sanctioned(env: Env, addr: String) -> bool {
         env.storage()
             .persistent()
@@ -181,9 +211,13 @@ impl ComplianceOracle {
             .unwrap_or(BytesN::from_array(&env, &[0u8; 32]))
     }
 
-    /// Batch check multiple addresses at once.
+    /// Batch check multiple addresses at once (max 200).
     /// Returns a vector of booleans in the same order as the input.
-    pub fn check_batch(env: Env, addresses: Vec<String>) -> Vec<bool> {
+    pub fn check_batch(env: Env, addresses: Vec<String>) -> Result<Vec<bool>, OracleError> {
+        if addresses.len() > MAX_BATCH_SIZE {
+            return Err(OracleError::BatchTooLarge);
+        }
+
         let mut results = Vec::new(&env);
         for addr in addresses.iter() {
             let sanctioned = env
@@ -193,7 +227,7 @@ impl ComplianceOracle {
                 .unwrap_or(false);
             results.push_back(sanctioned);
         }
-        results
+        Ok(results)
     }
 
     // ── Write (Admin Only) ──────────────────────────────────────────────
@@ -201,7 +235,9 @@ impl ComplianceOracle {
     /// Add addresses to the sanctions list. Accepts raw address strings
     /// from any blockchain (ETH, BTC, Stellar, Tron, etc.)
     ///
-    /// - `addresses`: up to 200 address strings per call
+    /// All addresses should be **lowercased** before submission.
+    ///
+    /// - `addresses`: up to 200 address strings per call (10-128 chars each)
     /// - `data_hash`: SHA-256 of the full dataset snapshot
     /// - `data_source`: data source identifier (e.g. "ofac_sdn")
     pub fn add_sanctioned(
@@ -223,19 +259,26 @@ impl ComplianceOracle {
 
         let mut added: u32 = 0;
         for addr in addresses.iter() {
+            // Validate address length
+            let len = addr.len();
+            if len < MIN_ADDR_LEN || len > MAX_ADDR_LEN {
+                continue; // Skip invalid, don't abort entire batch
+            }
+
             let key = DataKey::Sanctioned(addr.clone());
             if !env.storage().persistent().has(&key) {
                 env.storage().persistent().set(&key, &true);
                 env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
                 added += 1;
             } else {
+                // Refresh TTL for existing entries
                 env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
             }
         }
 
-        // Update metadata
+        // Update metadata (saturating_add prevents overflow — C-01 fix)
         let prev_count: u32 = env.storage().instance().get(&DataKey::EntityCount).unwrap_or(0);
-        env.storage().instance().set(&DataKey::EntityCount, &(prev_count + added));
+        env.storage().instance().set(&DataKey::EntityCount, &prev_count.saturating_add(added));
         env.storage().instance().set(&DataKey::LastUpdated, &env.ledger().timestamp());
         env.storage().instance().set(&DataKey::DataHash, &data_hash);
 
@@ -277,7 +320,7 @@ impl ComplianceOracle {
         }
 
         let prev_count: u32 = env.storage().instance().get(&DataKey::EntityCount).unwrap_or(0);
-        let new_count = if removed > prev_count { 0 } else { prev_count - removed };
+        let new_count = prev_count.saturating_sub(removed);
         env.storage().instance().set(&DataKey::EntityCount, &new_count);
         env.storage().instance().set(&DataKey::LastUpdated, &env.ledger().timestamp());
         env.storage().instance().set(&DataKey::DataHash, &data_hash);
@@ -311,12 +354,20 @@ impl ComplianceOracle {
     }
 
     /// Verify a Merkle proof that an address string is in the sanctions dataset.
+    ///
+    /// **Important — Leaf Encoding**:
+    /// The leaf hash is computed as `SHA-256(addr.to_xdr())`, which includes
+    /// the XDR envelope (length prefix + type tag). Off-chain Merkle tree
+    /// builders MUST use the same Soroban XDR encoding — not just the raw
+    /// string bytes — to produce valid proofs.
+    ///
+    /// Returns `Err(InvalidProof)` if the root is not set.
     pub fn verify_merkle_proof(
         env: Env,
         addr: String,
         proof: Vec<BytesN<32>>,
         leaf_index: u32,
-    ) -> bool {
+    ) -> Result<bool, OracleError> {
         let stored_root: BytesN<32> = env
             .storage()
             .instance()
@@ -325,10 +376,11 @@ impl ComplianceOracle {
 
         let zero_root = BytesN::from_array(&env, &[0u8; 32]);
         if stored_root == zero_root {
-            return false;
+            return Err(OracleError::InvalidProof);
         }
 
-        // Compute leaf hash: SHA-256(address_string_bytes)
+        // Compute leaf hash: SHA-256(addr.to_xdr())
+        // NOTE: This includes the XDR envelope — off-chain provers must match this.
         let addr_bytes = addr.clone().to_xdr(&env);
         let mut current_hash = env.crypto().sha256(&addr_bytes);
 
@@ -349,26 +401,35 @@ impl ComplianceOracle {
             idx /= 2;
         }
 
-        BytesN::from_array(&env, &current_hash.to_array()) == stored_root
+        Ok(BytesN::from_array(&env, &current_hash.to_array()) == stored_root)
     }
 
     // ── Community Reporting ─────────────────────────────────────────────
 
     /// Anyone can report a suspicious address from any chain.
-    /// The target is a raw address string. Returns the report ID.
+    /// The target is a raw address string (lowercased). Returns the report ID.
     pub fn report_address(
         env: Env,
         reporter: Address,
         target: String,
         reason: String,
-    ) -> u32 {
+    ) -> Result<u32, OracleError> {
         reporter.require_auth();
+
+        // Validate target address length
+        let len = target.len();
+        if len < MIN_ADDR_LEN || len > MAX_ADDR_LEN {
+            return Err(OracleError::InvalidAddressLength);
+        }
 
         let report_id: u32 = env
             .storage()
             .instance()
             .get(&DataKey::ReportCount)
             .unwrap_or(0u32);
+
+        // Prevent overflow — C-02 fix
+        let next_id = report_id.checked_add(1).ok_or(OracleError::ReportLimitReached)?;
 
         let report = ReportEntry {
             reporter: reporter.clone(),
@@ -379,13 +440,14 @@ impl ComplianceOracle {
         };
 
         env.storage().persistent().set(&DataKey::ReportData(report_id), &report);
+        // Reports get longer TTL (~180 days) to give admin time to review — M-04 fix
         env.storage().persistent().extend_ttl(
             &DataKey::ReportData(report_id),
-            TTL_THRESHOLD,
-            TTL_EXTEND_TO,
+            REPORT_TTL_THRESHOLD,
+            REPORT_TTL_EXTEND_TO,
         );
 
-        env.storage().instance().set(&DataKey::ReportCount, &(report_id + 1));
+        env.storage().instance().set(&DataKey::ReportCount, &next_id);
         env.storage().instance().extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND_TO);
 
         env.events().publish(
@@ -393,10 +455,10 @@ impl ComplianceOracle {
             (report_id, reporter, target),
         );
 
-        report_id
+        Ok(report_id)
     }
 
-    /// Admin reviews a community report.
+    /// Admin reviews a community report. Can only be reviewed once — M-03 fix.
     pub fn review_report(
         env: Env,
         report_id: u32,
@@ -412,6 +474,11 @@ impl ComplianceOracle {
             .get(&key)
             .ok_or(OracleError::ReportNotFound)?;
 
+        // Prevent re-review — M-03 fix
+        if report.status != 0 {
+            return Err(OracleError::AlreadyReviewed);
+        }
+
         if accept {
             report.status = 1;
 
@@ -420,8 +487,9 @@ impl ComplianceOracle {
                 env.storage().persistent().set(&sanction_key, &true);
                 env.storage().persistent().extend_ttl(&sanction_key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
+                // saturating_add prevents overflow — C-01 fix
                 let prev_count: u32 = env.storage().instance().get(&DataKey::EntityCount).unwrap_or(0);
-                env.storage().instance().set(&DataKey::EntityCount, &(prev_count + 1));
+                env.storage().instance().set(&DataKey::EntityCount, &prev_count.saturating_add(1));
             }
         } else {
             report.status = 2;

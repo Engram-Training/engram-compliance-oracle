@@ -1,10 +1,10 @@
 [package]
 name = "engram-compliance-oracle"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "On-chain sanctions compliance oracle for Stellar/Soroban — powered by Engram"
 license = "MIT"
-repository = "https://github.com/Engram-Training/compliance-oracle"
+repository = "https://github.com/Engram-Training/engram-compliance-oracle"
 
 [lib]
 crate-type = ["cdylib"]

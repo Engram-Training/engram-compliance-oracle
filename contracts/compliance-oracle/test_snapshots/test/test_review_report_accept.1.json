@@ -37,7 +37,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "string": "TN2YqTv5HpqENAsQPRFG3dqWxLkDCVk1qU"
+                  "string": "tn2yqtv5hpqenasqprfg3dqwxlkdcvk1qu"
                 },
                 {
                   "string": "Known mixer"
@@ -151,7 +151,7 @@
                         "symbol": "target"
                       },
                       "val": {
-                        "string": "TN2YqTv5HpqENAsQPRFG3dqWxLkDCVk1qU"
+                        "string": "tn2yqtv5hpqenasqprfg3dqwxlkdcvk1qu"
                       }
                     },
                     {
@@ -168,7 +168,7 @@
             },
             "ext": "v0"
           },
-          518400
+          3110400
         ]
       ],
       [
@@ -181,7 +181,7 @@
                   "symbol": "Sanctioned"
                 },
                 {
-                  "string": "TN2YqTv5HpqENAsQPRFG3dqWxLkDCVk1qU"
+                  "string": "tn2yqtv5hpqenasqprfg3dqwxlkdcvk1qu"
                 }
               ]
             },
@@ -201,7 +201,7 @@
                       "symbol": "Sanctioned"
                     },
                     {
-                      "string": "TN2YqTv5HpqENAsQPRFG3dqWxLkDCVk1qU"
+                      "string": "tn2yqtv5hpqenasqprfg3dqwxlkdcvk1qu"
                     }
                   ]
                 },
