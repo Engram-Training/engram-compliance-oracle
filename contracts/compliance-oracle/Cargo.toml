@@ -1,0 +1,17 @@
+[package]
+name = "engram-compliance-oracle"
+version = "0.1.0"
+edition = "2021"
+description = "On-chain sanctions compliance oracle for Stellar/Soroban — powered by Engram"
+license = "MIT"
+repository = "https://github.com/Engram-Training/compliance-oracle"
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
