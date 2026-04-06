@@ -16,7 +16,7 @@ jobs:
     with:
       release_name: ${{ github.ref_name }}
       release_description: 'Engram Compliance Oracle — on-chain sanctions screening for Stellar/Soroban'
-      relative_path: '["contracts/compliance-oracle"]'
+      relative_path: 'contracts/compliance-oracle'
       package: 'engram-compliance-oracle'
     secrets:
       release_token: ${{ secrets.GITHUB_TOKEN }}
