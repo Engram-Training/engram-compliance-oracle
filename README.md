@@ -8,16 +8,6 @@ A Soroban smart contract that any DeFi protocol on Stellar can call to check if 
 
 ## How It Works
 
-```
-┌──────────────────┐          ┌───────────────────┐
-│  Engram (off-chain) │───────▶│  Soroban Contract  │
-│                    │  update  │                   │
-│  • OFAC SDN        │         │  is_sanctioned()  │◀── Blend
-│  • OpenSanctions   │         │  check_batch()    │◀── Soroswap
-│  • Community       │         │  entity_count()   │◀── Aquarius
-│  • Chainalysis     │         │  data_hash()      │◀── Any DeFi
-└──────────────────┘          └───────────────────┘
-```
 
 1. **Engram's off-chain pipeline** ingests sanctions data (OFAC, OpenSanctions, etc.)
 2. **Admin pushes updates** to the Soroban contract via `add_sanctioned()` / `remove_sanctioned()`
