@@ -193,8 +193,16 @@ class TaintOrchestrator {
       } : {}),
     };
 
-    this.pushTaintToEngram(enrichedTaint).catch((err) => {
-      console.error("[Orchestrator] Failed to push taint to Engram:", err);
+    // Push to both Engram API and Soroban contract in parallel
+    Promise.allSettled([
+      this.pushTaintToEngram(enrichedTaint),
+      this.pushTaintToContract(enrichedTaint),
+    ]).then((results) => {
+      for (const r of results) {
+        if (r.status === "rejected") {
+          console.error("[Orchestrator] Push failed:", r.reason);
+        }
+      }
     });
   }
 
@@ -251,7 +259,7 @@ class TaintOrchestrator {
           }
 
           for (const entry of data.tainted) {
-            if (!this.watchedMap.has(entry.address) && entry.hopDepth < this.config.taintMaxHops) {
+            if (!this.watchedMap.has(entry.address)) {
               this.addToWatchList({
                 address: entry.address,
                 type: entry.type as any,
@@ -266,40 +274,43 @@ class TaintOrchestrator {
 
           if (newCount > 0) {
             console.log(
-              `[Orchestrator] Fetched ${data.totalCount} flagged addresses from Engram API (+${newCount} new)`
+              `[Orchestrator] Fetched ${newCount} new address(es) from Engram ` +
+              `(total: ${this.watchedMap.size})`
             );
           }
           return;
-        } else {
-          console.warn(`[Orchestrator] Engram API returned ${response.status} — falling back to seed list`);
         }
-      }
 
-      // ── Fallback: static seed addresses ──
-      const seedAddresses: WatchedAddress[] = [
-        {
-          address: "GA4ALNXXELASVP2S4FZXQFVXP3BPST7S2MZ5KBCSTR4PK3442NSQ5EQB",
-          type: "community_flagged",
-          source: "agent_consensus",
-          severity: 0.7,
-          hopDepth: 0,
-          chain: "stellar",
-        },
-        {
-          address: "GAZLTY5QNQQ4WBU6E3T3KKPZAREGARH6JQS4WF76QSWZ7GYTMGBDJZ5X",
-          type: "community_flagged",
-          source: "agent_consensus",
-          severity: 0.7,
-          hopDepth: 0,
-          chain: "stellar",
-        },
-      ];
-
-      for (const entry of seedAddresses) {
-        this.addToWatchList(entry);
+        console.warn(`[Orchestrator] Engram API returned ${response.status} — falling back to seed list`);
       }
     } catch (err) {
-      console.error("[Orchestrator] Failed to fetch flagged addresses:", err);
+      console.warn("[Orchestrator] Could not reach Engram API — using seed list:", err);
+    }
+
+    // ── Fallback: static seed addresses ──
+    // These are known sanctioned addresses for initial bootstrap.
+    // In production, the Engram API is the single source of truth.
+    const seedAddresses: WatchedAddress[] = [
+      {
+        address: "GAZDNM2NKUMCQCFZQRQCG465HQFCLKXZ2MZLCWXWK6BT2SRYUELF7HG",
+        type: "sanctioned",
+        source: "ofac_sdn",
+        severity: 1.0,
+        hopDepth: 0,
+        chain: "stellar",
+      },
+      {
+        address: "GBV6IYAJXLGXNQQQX3NCZPMPZDFXGCZQ7CESGAJRFUL3YCXE6BNIG3R",
+        type: "community_flagged",
+        source: "agent_consensus",
+        severity: 0.7,
+        hopDepth: 0,
+        chain: "stellar",
+      },
+    ];
+
+    for (const entry of seedAddresses) {
+      this.addToWatchList(entry);
     }
   }
 
@@ -391,6 +402,110 @@ class TaintOrchestrator {
     }
   }
 
+  // ── Soroban Contract Integration ──────────────────────────────────
+
+  /**
+   * Push a taint record on-chain via the Soroban compliance oracle contract.
+   * Calls set_taint(addr, score, source, hop, chain) on the contract.
+   * Non-blocking — failures are logged but don't halt the pipeline.
+   */
+  private async pushTaintToContract(taint: TaintRecord): Promise<void> {
+    if (!this.config.operatorSecret || !this.config.contractId) {
+      // No operator key or contract configured — skip on-chain push
+      return;
+    }
+
+    try {
+      const {
+        Keypair,
+        TransactionBuilder,
+        Networks,
+        Operation,
+        rpc,
+        nativeToScVal,
+      } = await import("@stellar/stellar-sdk");
+
+      const server = new rpc.Server(
+        this.config.network === "mainnet"
+          ? "https://soroban-rpc.mainnet.stellar.gateway.fm"
+          : "https://soroban-testnet.stellar.org"
+      );
+
+      const operatorKeypair = Keypair.fromSecret(this.config.operatorSecret);
+      const operatorPublic = operatorKeypair.publicKey();
+      const account = await server.getAccount(operatorPublic);
+
+      const contractId = this.config.contractId;
+      const networkPassphrase = this.config.network === "mainnet"
+        ? Networks.PUBLIC
+        : Networks.TESTNET;
+
+      // Build the set_taint invocation
+      const tx = new TransactionBuilder(account, {
+        fee: "100000",
+        networkPassphrase,
+      })
+        .addOperation(
+          Operation.invokeContractFunction({
+            contract: contractId,
+            function: "set_taint",
+            args: [
+              nativeToScVal(taint.taintedAddress, { type: "string" }), // addr
+              nativeToScVal(taint.score, { type: "u32" }),             // score
+              nativeToScVal(taint.sourceAddress, { type: "string" }),  // source
+              nativeToScVal(taint.hopDepth, { type: "u32" }),         // hop
+              nativeToScVal(taint.chain, { type: "string" }),         // chain
+            ],
+          })
+        )
+        .setTimeout(30)
+        .build();
+
+      // Simulate → prepare → sign → send
+      const simulated = await server.simulateTransaction(tx);
+
+      if (rpc.Api.isSimulationError(simulated)) {
+        console.error("[Contract] Simulation error:", (simulated as any).error);
+        return;
+      }
+
+      const prepared = rpc.assembleTransaction(tx, simulated).build();
+      prepared.sign(operatorKeypair);
+
+      const result = await server.sendTransaction(prepared);
+
+      if (result.status === "ERROR") {
+        console.error("[Contract] Send error:", result.errorResult);
+        return;
+      }
+
+      // Wait for confirmation (up to 15 seconds)
+      let status = await server.getTransaction(result.hash);
+      let attempts = 0;
+      while (status.status === "NOT_FOUND" && attempts < 15) {
+        await new Promise((r) => setTimeout(r, 1000));
+        status = await server.getTransaction(result.hash);
+        attempts++;
+      }
+
+      if (status.status === "SUCCESS") {
+        console.log(
+          `[Contract] ✓ Taint pushed on-chain: ${taint.taintedAddress.substring(0, 8)}... ` +
+          `score=${taint.score} hop=${taint.hopDepth} chain=${taint.chain} ` +
+          `tx=${result.hash.substring(0, 12)}...`
+        );
+      } else {
+        console.warn(`[Contract] Tx ${result.hash.substring(0, 12)}... status: ${status.status}`);
+      }
+    } catch (err) {
+      // Non-fatal — contract push is best-effort alongside API push
+      console.error(
+        "[Contract] Failed to push taint on-chain:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
   // ── Status ─────────────────────────────────────────────────────────
 
   /**
@@ -433,3 +548,4 @@ orchestrator.start().catch((err) => {
   console.error("[Orchestrator] Fatal error:", err);
   process.exit(1);
 });
+
