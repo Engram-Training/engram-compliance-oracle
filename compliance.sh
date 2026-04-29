@@ -3,10 +3,10 @@
 # Engram Compliance Oracle — Interaction Script
 # Contract: CCDAXPPXNXCM25QHYVEWDYBU3FJTNU6Z6BYCHTRRHJEXU6RGVD32PWQF
 # Network:  Stellar Testnet
-# Version:  v0.6.0 (Taint Propagation + Agent Consensus + Merkle)
+# Version:  v0.7.0 (Multi-chain Taint + NEAR Intents + Observability)
 # ──────────────────────────────────────────────────────────────────────
 
-CONTRACT_ID="CCDAXPPXNXCM25QHYVEWDYBU3FJTNU6Z6BYCHTRRHJEXU6RGVD32PWQF"
+CONTRACT_ID="CCYPN5ZXC4TOAA5ZSVC2PHIXRDY7K2JPO3WLCULARWCPZNL23S3GYJJB"
 NETWORK="testnet"
 SOURCE="engram-admin"
 
@@ -247,7 +247,7 @@ case "$1" in
 
   # ── Help ───────────────────────────────────────────────────────────
   *)
-    echo -e "${BOLD}Engram Compliance Oracle v0.6.0${NC}"
+    echo -e "${BOLD}Engram Compliance Oracle v0.7.0${NC}"
     echo -e "Contract: ${CYAN}${CONTRACT_ID}${NC}"
     echo ""
     echo -e "${BOLD}Usage:${NC} $0 <command> [args]"
